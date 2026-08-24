@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover" />
+    <meta name="theme-color" content="#f5e9e6" />
+    <meta name="description" content="Маленькое приглашение на один хороший день." />
+    <meta property="og:title" content="Для Машеньки ♡" />
+    <meta property="og:description" content="Маленькое приглашение на один хороший день." />
+    <meta property="og:image" content="./og.png" />
+    <title>Для Машеньки ♡</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="page-shell">
+      <div class="ambient ambient-one"></div>
+      <div class="ambient ambient-two"></div>
+      <div class="ambient ambient-three"></div>
+      <section class="invitation-card is-intro" id="card"></section>
+    </main>
+
+    <script>
+      const INTRO_TEXT = "Машенька, поздравляю тебя с твоим днём <3";
+      const API_URL = "https://dlya-mashenki.maxplayforeca.chatgpt.site/api/respond";
+      const foodsList = [
+        ["Хинкали", "🥟"], ["Пицца", "🍕"], ["Суши", "🍣"],
+        ["Chiko", "🍗"], ["Мороженое", "🍦"]
+      ];
+      const movies = ["11:00", "12:10", "13:50", "15:00", "16:40", "17:50", "19:30", "20:40", "22:20"];
+      const state = { started: false, intro: false, step: 0, foods: [], hour: 10, minute: 0, movie: null, sending: false, complete: false, error: "" };
+      const card = document.getElementById("card");
+      let audioContext = null;
+
+      const pad = (value) => String(value).padStart(2, "0");
+      const meetingTime = () => `${pad(state.hour)}:${pad(state.minute)}`;
+      const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+      function playKey(deleting = false) {
+        if (!audioContext || audioContext.state !== "running") return;
+        const oscillator = audioContext.createOscillator();
+        const gain = audioContext.createGain();
+        const now = audioContext.currentTime;
+        oscillator.type = "sine";
+        oscillator.frequency.setValueAtTime(deleting ? 190 + Math.random() * 35 : 420 + Math.random() * 90, now);
+        gain.gain.setValueAtTime(0.018, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.035);
+        oscillator.connect(gain);
+        gain.connect(audioContext.destination);
+        oscillator.start(now);
+        oscillator.stop(now + 0.04);
+      }
+
+      function introMarkup(text = "") {
+        return `
+          <div class="intro-screen" aria-live="polite">
+            <div class="terminal-mark" aria-hidden="true"><span></span><span></span><span></span></div>
+            <div class="typing-wrap">
+              <p class="terminal-prefix">message:</p>
+              <p class="typing-line"><span id="typed">${text}</span>${state.started ? '<span class="cursor" aria-hidden="true"></span>' : ""}</p>
+            </div>
+            ${state.started ? "" : '<button class="open-button" id="open" type="button"><span>Открыть приглашение</span><span class="heart" aria-hidden="true">♡</span></button>'}
+          </div>`;
+      }
+
+      function render() {
+        if (!state.intro) {
+          card.innerHTML = introMarkup();
+          const open = document.getElementById("open");
+          if (open) open.addEventListener("click", beginInvitation);
+          return;
+        }
+
+        card.classList.remove("is-intro");
+        card.classList.add("is-open");
+        if (state.complete) return renderFinal();
+
+        card.innerHTML = `
+          <div class="steps-shell">
+            <header class="steps-header">
+              <div class="progress-dots" aria-label="Шаг ${state.step + 1} из 3">
+                ${[0,1,2].map((i) => `<span class="${i <= state.step ? "active" : ""}" aria-hidden="true"></span>`).join("")}
+              </div>
+              <span class="step-number">0${state.step + 1} / 03</span>
+            </header>
+            ${state.step === 0 ? foodStep() : state.step === 1 ? timeStep() : movieStep()}
+            ${state.error ? `<p class="form-error" role="alert">${state.error}</p>` : ""}
+            <footer class="step-actions">
+              <button class="back-button" id="back" type="button" ${state.step === 0 || state.sending ? "disabled" : ""}>Назад</button>
+              <button class="confirm-button ${state.step === 2 ? "send-button" : ""}" id="confirm" type="button"
+                ${(state.step === 0 && !state.foods.length) || (state.step === 2 && !state.movie) || state.sending ? "disabled" : ""}>
+                ${state.step < 2 ? 'Подтвердить <span aria-hidden="true">→</span>' : state.sending ? "Отправляю…" : "Подтвердить отправление"}
+              </button>
+            </footer>
+          </div>`;
+
+        bindStepEvents();
+      }
+
+      function foodStep() {
+        return `<div class="step-content step-food">
+          <p class="eyebrow">Для начала</p>
+          <h1 tabindex="-1">Что бы ты хотела покушать?</h1>
+          <p class="supporting-copy">Можно выбрать несколько — сегодня всё можно.</p>
+          <div class="food-grid">
+            ${foodsList.map(([label, emoji]) => {
+              const selected = state.foods.includes(label);
+              return `<button class="choice-card ${selected ? "selected" : ""}" type="button" data-food="${label}" aria-pressed="${selected}">
+                <span class="choice-emoji" aria-hidden="true">${emoji}</span><span>${label}</span><span class="choice-check" aria-hidden="true">✓</span>
+              </button>`;
+            }).join("")}
+          </div>
+        </div>`;
+      }
+
+      function timeStep() {
+        return `<div class="step-content step-time">
+          <p class="eyebrow">Теперь о встрече</p>
+          <h1 tabindex="-1">Во сколько увидимся?</h1>
+          <p class="supporting-copy">Я хотел бы провести с тобой как можно больше времени — хоть с 7 утра, хоть с 10.</p>
+          <div class="time-display" id="time-display" aria-live="polite">${meetingTime()}</div>
+          <div class="slider-group">
+            <label for="hour"><span>Часы</span><strong id="hour-value">${pad(state.hour)}</strong></label>
+            <input id="hour" type="range" min="7" max="22" value="${state.hour}" />
+            <div class="range-labels"><span>07</span><span>22</span></div>
+          </div>
+          <div class="slider-group">
+            <label for="minute"><span>Минуты</span><strong id="minute-value">${pad(state.minute)}</strong></label>
+            <input id="minute" type="range" min="0" max="55" step="5" value="${state.minute}" />
+            <div class="range-labels"><span>00</span><span>55</span></div>
+          </div>
+        </div>`;
+      }
+
+      function movieStep() {
+        return `<div class="step-content step-movie">
+          <p class="eyebrow">И ещё кое-что</p>
+          <h1 tabindex="-1">Во сколько пойдём на Человека-паука?</h1>
+          <p class="supporting-copy">Насчёт поздних сеансов не переживай: довезу с комфортом на машине и не обижу.</p>
+          <div class="showtimes" role="radiogroup" aria-label="Время сеанса">
+            ${movies.map((time) => `<button class="showtime ${state.movie === time ? "selected" : ""}" type="button" data-movie="${time}" role="radio" aria-checked="${state.movie === time}"><span class="showtime-time">${time}</span></button>`).join("")}
+          </div>
+        </div>`;
+      }
+
+      function bindStepEvents() {
+        document.querySelectorAll("[data-food]").forEach((button) => button.addEventListener("click", () => {
+          const food = button.dataset.food;
+          state.foods = state.foods.includes(food) ? state.foods.filter((item) => item !== food) : [...state.foods, food];
+          render();
+        }));
+        document.querySelectorAll("[data-movie]").forEach((button) => button.addEventListener("click", () => {
+          state.movie = button.dataset.movie; render();
+        }));
+
+        const hour = document.getElementById("hour");
+        const minute = document.getElementById("minute");
+        if (hour) hour.addEventListener("input", (event) => updateTime("hour", event.target.value));
+        if (minute) minute.addEventListener("input", (event) => updateTime("minute", event.target.value));
+
+        document.getElementById("back").addEventListener("click", () => { state.error = ""; state.step = Math.max(0, state.step - 1); render(); });
+        document.getElementById("confirm").addEventListener("click", () => {
+          if (state.step < 2) { state.step += 1; render(); }
+          else submitAnswer();
+        });
+      }
+
+      function updateTime(key, value) {
+        state[key] = Number(value);
+        document.getElementById("time-display").textContent = meetingTime();
+        document.getElementById(`${key}-value`).textContent = pad(state[key]);
+      }
+
+      async function beginInvitation() {
+        if (state.started) return;
+        state.started = true;
+        audioContext ||= new AudioContext();
+        await audioContext.resume();
+        card.innerHTML = introMarkup();
+        const typed = document.getElementById("typed");
+
+        if (matchMedia("(prefers-reduced-motion: reduce)").matches) {
+          typed.textContent = INTRO_TEXT;
+          await wait(900);
+        } else {
+          for (let i = 1; i <= INTRO_TEXT.length; i += 1) {
+            typed.textContent = INTRO_TEXT.slice(0, i); playKey(); await wait(54 + Math.random() * 40);
+          }
+          await wait(1900);
+          for (let i = INTRO_TEXT.length - 1; i >= 0; i -= 1) {
+            typed.textContent = INTRO_TEXT.slice(0, i); playKey(true); await wait(25);
+          }
+          await wait(320);
+        }
+        state.intro = true;
+        render();
+      }
+
+      async function submitAnswer() {
+        if (!state.movie || state.sending) return;
+        state.sending = true; state.error = ""; render();
+        try {
+          const response = await fetch(API_URL, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ foods: state.foods, meetingTime: meetingTime(), movieTime: state.movie, website: "" })
+          });
+          if (!response.ok) throw new Error("send failed");
+          state.complete = true;
+        } catch (error) {
+          state.error = "Не получилось отправить ответ. Проверь интернет и попробуй ещё раз ♡";
+        } finally {
+          state.sending = false; render();
+        }
+      }
+
+      function renderFinal() {
+        card.innerHTML = `<div class="final-screen">
+          <p class="eyebrow">Всё получилось</p>
+          <div class="postcard">
+            <span class="postcard-stamp" aria-hidden="true">♡</span>
+            <p class="postcard-to">Для Машеньки</p>
+            <h1>Наш маленький план</h1>
+            <dl class="summary-list">
+              <div><dt>Будем вкусно есть</dt><dd>${state.foods.join(", ")}</dd></div>
+              <div><dt>Увидимся</dt><dd>${meetingTime()}</dd></div>
+              <div><dt>Человек-паук</dt><dd>${state.movie}</dd></div>
+            </dl>
+            <p class="goodbye">Хорошего тебе дня,<br />увидимся ♡</p>
+          </div>
+          <p class="sent-note">Твой ответ уже отправлен</p>
+        </div>`;
+      }
+
+      render();
+    </script>
+  </body>
+</html>
