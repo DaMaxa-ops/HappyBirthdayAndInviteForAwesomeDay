@@ -50,6 +50,44 @@
         oscillator.stop(now + 0.04);
       }
 
+      function playCreamyKeycap() {
+        if (!audioContext || audioContext.state !== "running") return;
+        const now = audioContext.currentTime;
+        const body = audioContext.createOscillator();
+        const bodyGain = audioContext.createGain();
+        const noise = audioContext.createBufferSource();
+        const noiseFilter = audioContext.createBiquadFilter();
+        const noiseGain = audioContext.createGain();
+        const sampleCount = Math.ceil(audioContext.sampleRate * 0.035);
+        const buffer = audioContext.createBuffer(1, sampleCount, audioContext.sampleRate);
+        const samples = buffer.getChannelData(0);
+
+        for (let i = 0; i < sampleCount; i += 1) {
+          samples[i] = (Math.random() * 2 - 1) * (1 - i / sampleCount);
+        }
+
+        body.type = "sine";
+        body.frequency.setValueAtTime(185, now);
+        body.frequency.exponentialRampToValueAtTime(105, now + 0.075);
+        bodyGain.gain.setValueAtTime(0.05, now);
+        bodyGain.gain.exponentialRampToValueAtTime(0.001, now + 0.085);
+        noise.buffer = buffer;
+        noiseFilter.type = "lowpass";
+        noiseFilter.frequency.setValueAtTime(1450, now);
+        noiseFilter.Q.setValueAtTime(0.7, now);
+        noiseGain.gain.setValueAtTime(0.018, now);
+        noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.04);
+        body.connect(bodyGain);
+        bodyGain.connect(audioContext.destination);
+        noise.connect(noiseFilter);
+        noiseFilter.connect(noiseGain);
+        noiseGain.connect(audioContext.destination);
+        body.start(now);
+        noise.start(now);
+        body.stop(now + 0.09);
+        noise.stop(now + 0.045);
+      }
+
       function introMarkup(text = "") {
         return `
           <div class="intro-screen" aria-live="polite">
@@ -144,11 +182,13 @@
 
       function bindStepEvents() {
         document.querySelectorAll("[data-food]").forEach((button) => button.addEventListener("click", () => {
+          playCreamyKeycap();
           const food = button.dataset.food;
           state.foods = state.foods.includes(food) ? state.foods.filter((item) => item !== food) : [...state.foods, food];
           render();
         }));
         document.querySelectorAll("[data-movie]").forEach((button) => button.addEventListener("click", () => {
+          playCreamyKeycap();
           state.movie = button.dataset.movie; render();
         }));
 
