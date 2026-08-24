@@ -27,7 +27,7 @@
         ["Chiko", "🍗"], ["Мороженое", "🍦"]
       ];
       const movies = ["11:00", "12:10", "13:50", "15:00", "16:40", "17:50", "19:30", "20:40", "22:20"];
-      const state = { started: false, intro: false, step: 0, foods: [], hour: 10, minute: 0, movie: null, sending: false, complete: false, error: "" };
+      const state = { started: false, intro: false, step: 0, foods: [], hour: 10, minute: 0, movie: null, sending: false, cooling: false, complete: false, error: "" };
       const card = document.getElementById("card");
       let audioContext = null;
 
@@ -144,8 +144,8 @@
             <footer class="step-actions">
               <button class="back-button" id="back" type="button" ${state.step === 0 || state.sending ? "disabled" : ""}>Назад</button>
               <button class="confirm-button ${state.step === 2 ? "send-button" : ""}" id="confirm" type="button"
-                ${(state.step === 0 && !state.foods.length) || (state.step === 2 && !state.movie) || state.sending ? "disabled" : ""}>
-                ${state.step < 2 ? 'Подтвердить <span aria-hidden="true">→</span>' : state.sending ? "Отправляю…" : "Подтвердить отправление"}
+                ${(state.step === 0 && !state.foods.length) || (state.step === 2 && !state.movie) || state.sending || state.cooling ? "disabled" : ""}>
+                ${state.step < 2 ? 'Подтвердить <span aria-hidden="true">→</span>' : state.sending ? "Отправляю…" : state.cooling ? "Подожди минутку…" : "Подтвердить отправление"}
               </button>
             </footer>
           </div>`;
@@ -255,28 +255,27 @@
       }
 
       async function submitAnswer() {
-        if (!state.movie || state.sending) return;
+        if (!state.movie || state.sending || state.cooling) return;
         state.sending = true; state.error = ""; render();
         try {
-          const payload = JSON.stringify({ foods: state.foods, meetingTime: meetingTime(), movieTime: state.movie, website: "" });
-          let response = null;
+          const response = await fetch(API_URL, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ foods: state.foods, meetingTime: meetingTime(), movieTime: state.movie, website: "" })
+          });
 
-          for (let attempt = 0; attempt < 2; attempt += 1) {
-            try {
-              response = await fetch(API_URL, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: payload
-              });
-              if (response.ok) break;
-            } catch (error) {
-              response = null;
-            }
-
-            if (attempt === 0) await wait(900);
+          if (response.status === 429) {
+            state.cooling = true;
+            state.error = "Почтовая отправка попросила минутку. Кнопка скоро снова станет активной ♡";
+            setTimeout(() => {
+              state.cooling = false;
+              state.error = "";
+              render();
+            }, 60000);
+            return;
           }
 
-          if (!response?.ok) throw new Error("send failed");
+          if (!response.ok) throw new Error("send failed");
           state.complete = true;
         } catch (error) {
           state.error = "Не получилось отправить ответ. Нажми ещё раз через пару секунд ♡";
