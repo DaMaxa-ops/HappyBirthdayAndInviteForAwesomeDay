@@ -21,7 +21,7 @@
 
     <script>
       const INTRO_TEXT = "Машенька, поздравляю тебя с твоим днём <3";
-      const API_URL = "https://dlya-mashenki.maxplayforeca.chatgpt.site/api/respond";
+      const FORM_ENDPOINT = "https://formsubmit.co/ajax/maxplayforeca@gmail.com";
       const foodsList = [
         ["Хинкали", "🥟"], ["Пицца", "🍕"], ["Суши", "🍣"],
         ["Chiko", "🍗"], ["Мороженое", "🍦"]
@@ -258,10 +258,18 @@
         if (!state.movie || state.sending || state.cooling) return;
         state.sending = true; state.error = ""; render();
         try {
-          const response = await fetch(API_URL, {
+          const response = await fetch(FORM_ENDPOINT, {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ foods: state.foods, meetingTime: meetingTime(), movieTime: state.movie, website: "" })
+            headers: { "Accept": "application/json", "Content-Type": "application/json" },
+            body: JSON.stringify({
+              _subject: "Машенька ответила на приглашение ♡",
+              _template: "table",
+              _captcha: "false",
+              _url: window.location.href,
+              "Что будем есть": state.foods.join(", "),
+              "Во сколько увидимся": meetingTime(),
+              "Сеанс Человека-паука": state.movie
+            })
           });
 
           if (response.status === 429) {
@@ -275,7 +283,9 @@
             return;
           }
 
-          if (!response.ok) throw new Error("send failed");
+          const result = await response.json().catch(() => null);
+          const delivered = result && (result.success === true || result.success === "true");
+          if (!response.ok || !delivered) throw new Error("send failed");
           state.complete = true;
         } catch (error) {
           state.error = "Не получилось отправить ответ. Нажми ещё раз через пару секунд ♡";
