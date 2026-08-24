@@ -51,41 +51,60 @@
       }
 
       function playCreamyKeycap() {
-        if (!audioContext || audioContext.state !== "running") return;
-        const now = audioContext.currentTime;
-        const body = audioContext.createOscillator();
-        const bodyGain = audioContext.createGain();
-        const noise = audioContext.createBufferSource();
-        const noiseFilter = audioContext.createBiquadFilter();
-        const noiseGain = audioContext.createGain();
-        const sampleCount = Math.ceil(audioContext.sampleRate * 0.035);
-        const buffer = audioContext.createBuffer(1, sampleCount, audioContext.sampleRate);
-        const samples = buffer.getChannelData(0);
+        audioContext ||= new AudioContext();
 
-        for (let i = 0; i < sampleCount; i += 1) {
-          samples[i] = (Math.random() * 2 - 1) * (1 - i / sampleCount);
-        }
+        const strike = () => {
+          const now = audioContext.currentTime;
+          const master = audioContext.createGain();
+          const compressor = audioContext.createDynamicsCompressor();
+          const body = audioContext.createOscillator();
+          const bodyGain = audioContext.createGain();
+          const cap = audioContext.createOscillator();
+          const capGain = audioContext.createGain();
+          const noise = audioContext.createBufferSource();
+          const noiseFilter = audioContext.createBiquadFilter();
+          const noiseGain = audioContext.createGain();
+          const sampleCount = Math.ceil(audioContext.sampleRate * 0.045);
+          const buffer = audioContext.createBuffer(1, sampleCount, audioContext.sampleRate);
+          const samples = buffer.getChannelData(0);
 
-        body.type = "sine";
-        body.frequency.setValueAtTime(185, now);
-        body.frequency.exponentialRampToValueAtTime(105, now + 0.075);
-        bodyGain.gain.setValueAtTime(0.05, now);
-        bodyGain.gain.exponentialRampToValueAtTime(0.001, now + 0.085);
-        noise.buffer = buffer;
-        noiseFilter.type = "lowpass";
-        noiseFilter.frequency.setValueAtTime(1450, now);
-        noiseFilter.Q.setValueAtTime(0.7, now);
-        noiseGain.gain.setValueAtTime(0.018, now);
-        noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.04);
-        body.connect(bodyGain);
-        bodyGain.connect(audioContext.destination);
-        noise.connect(noiseFilter);
-        noiseFilter.connect(noiseGain);
-        noiseGain.connect(audioContext.destination);
-        body.start(now);
-        noise.start(now);
-        body.stop(now + 0.09);
-        noise.stop(now + 0.045);
+          for (let i = 0; i < sampleCount; i += 1) {
+            samples[i] = (Math.random() * 2 - 1) * (1 - i / sampleCount);
+          }
+
+          body.type = "sine";
+          body.frequency.setValueAtTime(170 + Math.random() * 12, now);
+          body.frequency.exponentialRampToValueAtTime(82, now + 0.1);
+          bodyGain.gain.setValueAtTime(0.15, now);
+          bodyGain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+          cap.type = "triangle";
+          cap.frequency.setValueAtTime(720 + Math.random() * 60, now);
+          cap.frequency.exponentialRampToValueAtTime(340, now + 0.035);
+          capGain.gain.setValueAtTime(0.045, now);
+          capGain.gain.exponentialRampToValueAtTime(0.001, now + 0.045);
+          noise.buffer = buffer;
+          noiseFilter.type = "lowpass";
+          noiseFilter.frequency.setValueAtTime(2100, now);
+          noiseFilter.Q.setValueAtTime(0.8, now);
+          noiseGain.gain.setValueAtTime(0.05, now);
+          noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.05);
+          master.gain.setValueAtTime(0.9, now);
+          compressor.threshold.setValueAtTime(-18, now);
+          compressor.ratio.setValueAtTime(4, now);
+          body.connect(bodyGain).connect(master);
+          cap.connect(capGain).connect(master);
+          noise.connect(noiseFilter).connect(noiseGain).connect(master);
+          master.connect(compressor).connect(audioContext.destination);
+          body.start(now);
+          cap.start(now);
+          noise.start(now);
+          body.stop(now + 0.13);
+          cap.stop(now + 0.055);
+          noise.stop(now + 0.055);
+        };
+
+        if (audioContext.state === "running") strike();
+        else audioContext.resume().then(strike).catch(() => {});
       }
 
       function introMarkup(text = "") {
